@@ -282,4 +282,8 @@ struct kgsl_snapshot_gpu_object_v2 {
 
 void kgsl_snapshot_push_object(struct kgsl_process_private *process,
 	uint64_t gpuaddr, uint64_t dwords);
+
+#ifdef __KERNEL__
+#endif
+
 #endif

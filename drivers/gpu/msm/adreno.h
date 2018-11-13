@@ -590,6 +590,7 @@ struct adreno_device {
 	unsigned int speed_bin;
 	unsigned int quirks;
 
+	struct coresight_device *csdev[GPU_CORESIGHT_MAX];
 	uint32_t gpmu_throttle_counters[ADRENO_GPMU_THROTTLE_COUNTERS];
 	struct work_struct irq_storm_work;
 
@@ -968,6 +969,9 @@ struct adreno_gpudev {
 
 	struct adreno_perfcounters *perfcounters;
 	const struct adreno_invalid_countables *invalid_countables;
+	struct adreno_snapshot_data *snapshot_data;
+
+	struct adreno_coresight *coresight[GPU_CORESIGHT_MAX];
 
 	struct adreno_irq *irq;
 	int num_prio_levels;
@@ -976,6 +980,8 @@ struct adreno_gpudev {
 	unsigned int gbif_arb_halt_mask;
 	unsigned int gbif_gx_halt_mask;
 	/* GPU specific function hooks */
+	void (*irq_trace)(struct adreno_device *, unsigned int status);
+	void (*snapshot)(struct adreno_device *, struct kgsl_snapshot *);
 	void (*platform_setup)(struct adreno_device *);
 	void (*init)(struct adreno_device *);
 	void (*remove)(struct adreno_device *);
@@ -1030,6 +1036,8 @@ struct adreno_gpudev {
 	int (*perfcounter_update)(struct adreno_device *adreno_dev,
 				struct adreno_perfcount_register *reg,
 				bool update_reg);
+	size_t (*snapshot_preemption)(struct kgsl_device *, u8 *,
+				 size_t, void *);
 	void (*zap_shader_unload)(struct adreno_device *);
 	int (*secure_pt_hibernate)(struct adreno_device *);
 	int (*secure_pt_restore)(struct adreno_device *);
@@ -1113,9 +1121,6 @@ extern unsigned int *adreno_ft_regs;
 extern unsigned int adreno_ft_regs_num;
 extern unsigned int *adreno_ft_regs_val;
 
-extern struct adreno_gpudev adreno_a3xx_gpudev;
-extern struct adreno_gpudev adreno_a4xx_gpudev;
-extern struct adreno_gpudev adreno_a5xx_gpudev;
 extern struct adreno_gpudev adreno_a6xx_gpudev;
 
 extern int adreno_wake_nice;
