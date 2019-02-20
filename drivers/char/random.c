@@ -705,11 +705,8 @@ retry:
 	if (cmpxchg(&r->entropy_count, orig, entropy_count) != orig)
 		goto retry;
 
-	if (has_initialized) {
+	if (has_initialized)
 		r->initialized = 1;
-		wake_up_interruptible(&random_read_wait);
-		kill_fasync(&fasync, SIGIO, POLL_IN);
-	}
 
 	trace_credit_entropy_bits(r->name, nbits,
 				  entropy_count >> ENTROPY_SHIFT, _RET_IP_);
