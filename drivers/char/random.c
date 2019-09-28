@@ -1538,7 +1538,7 @@ EXPORT_SYMBOL(get_random_bytes);
  *
  * So the re-arming always happens in the entropy loop itself.
  */
-static void entropy_timer(struct timer_list *t)
+static void entropy_timer(unsigned long data)
 {
 	credit_entropy_bits(&input_pool, 1);
 }
@@ -1560,7 +1560,7 @@ static void try_to_generate_entropy(void)
 	if (stack.now == random_get_entropy())
 		return;
 
-	timer_setup_on_stack(&stack.timer, entropy_timer, 0);
+	__setup_timer_on_stack(&stack.timer, entropy_timer, 0, 0);
 	while (!crng_ready()) {
 		if (!timer_pending(&stack.timer))
 			mod_timer(&stack.timer, jiffies+1);
