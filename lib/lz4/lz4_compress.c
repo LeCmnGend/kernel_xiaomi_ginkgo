@@ -708,7 +708,7 @@ _last_literals:
 		} else {
 			*op++ = (BYTE)(lastRunSize<<ML_BITS);
 		}
-		LZ4_memcpy(op, anchor, lastRunSize);
+		memcpy(op, anchor, lastRunSize);
 		op += lastRunSize;
 	}
 
@@ -752,7 +752,7 @@ static int LZ4_compress_destSize_extState(
 }
 
 
-int LZ4_compress_destSize(
+static int LZ4_compress_destSize(
 	const char *src,
 	char *dst,
 	int *srcSizePtr,
@@ -762,12 +762,11 @@ int LZ4_compress_destSize(
 	return LZ4_compress_destSize_extState(wrkmem, src, dst, srcSizePtr,
 		targetDstSize);
 }
-EXPORT_SYMBOL(LZ4_compress_destSize);
 
 /*-******************************
  *	Streaming functions
  ********************************/
-void LZ4_resetStream(LZ4_stream_t *LZ4_stream)
+static FORCE_INLINE void LZ4_resetStream(LZ4_stream_t *LZ4_stream)
 {
 	memset(LZ4_stream, 0, sizeof(LZ4_stream_t));
 }
@@ -854,7 +853,7 @@ int LZ4_saveDict(LZ4_stream_t *LZ4_dict, char *safeBuffer, int dictSize)
 }
 EXPORT_SYMBOL(LZ4_saveDict);
 
-int LZ4_compress_fast_continue(LZ4_stream_t *LZ4_stream, const char *source,
+static int LZ4_compress_fast_continue(LZ4_stream_t *LZ4_stream, const char *source,
 	char *dest, int inputSize, int maxOutputSize, int acceleration)
 {
 	LZ4_stream_t_internal *streamPtr = &LZ4_stream->internal_donotuse;
@@ -934,7 +933,6 @@ int LZ4_compress_fast_continue(LZ4_stream_t *LZ4_stream, const char *source,
 		return result;
 	}
 }
-EXPORT_SYMBOL(LZ4_compress_fast_continue);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("LZ4 compressor");
