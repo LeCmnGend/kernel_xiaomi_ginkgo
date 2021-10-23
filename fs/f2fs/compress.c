@@ -729,6 +729,25 @@ bool f2fs_cluster_can_merge_page(struct compress_ctx *cc, pgoff_t index)
 	return is_page_in_cluster(cc, index);
 }
 
+bool f2fs_all_cluster_page_loaded(struct compress_ctx *cc, struct pagevec *pvec,
+				int index, int nr_pages)
+{
+	unsigned long pgidx;
+	int i;
+
+	if (nr_pages - index < cc->cluster_size)
+		return false;
+
+	pgidx = pvec->pages[index]->index;
+
+	for (i = 1; i < cc->cluster_size; i++) {
+		if (pvec->pages[index + i]->index != pgidx + i)
+			return false;
+	}
+
+	return true;
+}
+
 static bool __cluster_may_compress(struct compress_ctx *cc)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(cc->inode);
