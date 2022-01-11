@@ -50,7 +50,4 @@ static inline void blake2s(u8 *out, const u8 *in, const u8 *key,
 	blake2s_final(&state, out);
 }
 
-void blake2s_hmac(u8 *out, const u8 *in, const u8 *key, const size_t outlen,
-		  const size_t inlen, const size_t keylen);
-
 #endif /* _ZINC_BLAKE2S_H */
