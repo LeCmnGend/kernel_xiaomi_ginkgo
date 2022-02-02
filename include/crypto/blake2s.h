@@ -26,11 +26,37 @@ struct blake2s_state {
 	unsigned int outlen;
 };
 
+enum blake2s_iv {
+	BLAKE2S_IV0 = 0x6A09E667UL,
+	BLAKE2S_IV1 = 0xBB67AE85UL,
+	BLAKE2S_IV2 = 0x3C6EF372UL,
+	BLAKE2S_IV3 = 0xA54FF53AUL,
+	BLAKE2S_IV4 = 0x510E527FUL,
+	BLAKE2S_IV5 = 0x9B05688CUL,
+	BLAKE2S_IV6 = 0x1F83D9ABUL,
+	BLAKE2S_IV7 = 0x5BE0CD19UL,
+};
+
 void blake2s_init(struct blake2s_state *state, const size_t outlen);
 void blake2s_init_key(struct blake2s_state *state, const size_t outlen,
 		      const void *key, const size_t keylen);
 void blake2s_update(struct blake2s_state *state, const u8 *in, size_t inlen);
 void blake2s_final(struct blake2s_state *state, u8 *out);
+
+static inline void blake2s_init_param(struct blake2s_state *state,
+				      const u32 param)
+{
+	*state = (struct blake2s_state){{
+		BLAKE2S_IV0 ^ param,
+		BLAKE2S_IV1,
+		BLAKE2S_IV2,
+		BLAKE2S_IV3,
+		BLAKE2S_IV4,
+		BLAKE2S_IV5,
+		BLAKE2S_IV6,
+		BLAKE2S_IV7,
+	}};
+}
 
 static inline void blake2s(u8 *out, const u8 *in, const u8 *key,
 			   const size_t outlen, const size_t inlen,
@@ -50,5 +76,16 @@ static inline void blake2s(u8 *out, const u8 *in, const u8 *key,
 	blake2s_update(&state, in, inlen);
 	blake2s_final(&state, out);
 }
+
+static inline void blake2s_increment_counter(struct blake2s_state *state,
+					     const u32 inc)
+{
+	state->t[0] += inc;
+	state->t[1] += (state->t[0] < inc);
+}
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("BLAKE2s hash function");
+MODULE_AUTHOR("Jason A. Donenfeld <Jason@zx2c4.com>");
 
 #endif /* _CRYPTO_BLAKE2S_H */
