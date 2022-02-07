@@ -906,7 +906,13 @@ endif
 ifdef CONFIG_LTO_CLANG
 ifdef CONFIG_THINLTO
 lto-clang-flags	:= -flto=thin
+# Set default thinlto-cache-dir
+ifeq ($(THINLTO_CACHE_DIR),)
 LDFLAGS		+= --thinlto-cache-dir=.thinlto-cache
+else
+LDFLAGS		+= --thinlto-cache-dir=$(THINLTO_CACHE_DIR)
+endif
+# End: Set default thinlto-cache-dir
 else
 lto-clang-flags	:= -flto
 endif
@@ -919,7 +925,6 @@ KBUILD_LDFLAGS += $(LD_FLAGS_LTO_CLANG)
 KBUILD_LDFLAGS_MODULE += $(LD_FLAGS_LTO_CLANG)
 
 KBUILD_LDFLAGS_MODULE += -T scripts/module-lto.lds
-
 
 # allow disabling only clang LTO where needed
 DISABLE_LTO_CLANG := -fno-lto
