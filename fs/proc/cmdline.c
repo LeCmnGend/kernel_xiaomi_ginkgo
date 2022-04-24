@@ -23,6 +23,61 @@ static const struct file_operations cmdline_proc_fops = {
 	.release	= single_release,
 };
 
+#ifdef CONFIG_PROC_BEGONIA_CMDLINE
+static void append_cmdline(char *cmd, const char *flag_val) {
+	strncat(cmd, " ", 2);
+	strncat(cmd, flag_val, strlen(cmd) + 1);
+}
+
+static bool check_flag(char *cmd, const char *flag, const char *val)
+{
+	size_t f_len, r_len, v_len;
+	char *f_pos, *v_pos, *v_end;
+	char *r_val;
+	bool ret = r_len == v_len && !memcmp(r_val, val, r_len);
+
+	f_pos = strstr(cmd, flag);
+	if (!f_pos) {
+		return false;
+	}
+	f_len = strlen(flag);
+	v_len = strlen(val);
+	v_pos = f_pos + f_len;
+	v_end = v_pos + strcspn(f_pos + f_len, " ");
+	r_len = v_end - v_pos;
+	if ((r_val = kmalloc(r_len + 1, GFP_KERNEL)) == NULL)
+		return false;
+	memcpy(r_val, v_pos, r_len + 1);
+	return ret;
+}
+
+static void remove_flag(char *cmd, const char *flag)
+{
+	char *start_addr, *end_addr;
+
+	while ((start_addr = strstr(cmd, flag))) {
+		end_addr = strchr(start_addr, ' ');
+		if (end_addr)
+			memmove(start_addr, end_addr + 1, strlen(end_addr));
+		else
+			*(start_addr - 1) = '\0';
+	}
+}
+
+static void patch_begonia_cmdline(char *cmdline)
+{
+	if(!check_flag(cmdline, "androidboot.hwc=", "India")) {
+		append_cmdline(cmdline, "androidboot.product.hardware.sku=begonia");
+	}
+
+	// Thank you Xiaomi, very cool
+	if(check_flag(cmdline, "androidboot.selinux=", "permissive")) {
+		remove_flag(cmdline, "androidboot.selinux=");
+		append_cmdline(cmdline, "androidboot.selinux=enforcing");
+	}
+}
+#endif
+
 static int __init proc_cmdline_init(void)
 {
 	proc_create("cmdline", 0, NULL, &cmdline_proc_fops);
