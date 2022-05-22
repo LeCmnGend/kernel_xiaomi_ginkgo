@@ -21,7 +21,6 @@
 #include <linux/buffer_head.h>	/* grr. try_to_release_page,
 				   do_invalidatepage */
 #include <linux/shmem_fs.h>
-#include <linux/cleancache.h>
 #include <linux/rmap.h>
 #include "internal.h"
 
@@ -264,7 +263,7 @@ void truncate_inode_pages_range(struct address_space *mapping,
 	int		i;
 
 	if (mapping->nrpages == 0 && mapping->nrexceptional == 0)
-		goto out;
+		return;
 
 	/* Offsets within partial pages */
 	partial_start = lstart & (PAGE_SIZE - 1);
@@ -333,7 +332,6 @@ void truncate_inode_pages_range(struct address_space *mapping,
 			}
 			wait_on_page_writeback(page);
 			zero_user_segment(page, partial_start, top);
-			cleancache_invalidate_page(mapping, page);
 			if (page_has_private(page))
 				do_invalidatepage(page, partial_start,
 						  top - partial_start);
@@ -346,7 +344,6 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		if (page) {
 			wait_on_page_writeback(page);
 			zero_user_segment(page, 0, partial_end);
-			cleancache_invalidate_page(mapping, page);
 			if (page_has_private(page))
 				do_invalidatepage(page, 0,
 						  partial_end);
@@ -359,7 +356,7 @@ void truncate_inode_pages_range(struct address_space *mapping,
 	 * will be released, just zeroed, so we can bail out now.
 	 */
 	if (start >= end)
-		goto out;
+		return;
 
 	index = start;
 	for ( ; ; ) {
@@ -406,9 +403,6 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		pagevec_release(&pvec);
 		index++;
 	}
-
-out:
-	cleancache_invalidate_inode(mapping);
 }
 EXPORT_SYMBOL(truncate_inode_pages_range);
 
@@ -473,10 +467,6 @@ void truncate_inode_pages_final(struct address_space *mapping)
 		spin_unlock_irq(&mapping->tree_lock);
 	}
 
-	/*
-	 * Cleancache needs notification even if there are no pages or shadow
-	 * entries.
-	 */
 	truncate_inode_pages(mapping, 0);
 }
 EXPORT_SYMBOL(truncate_inode_pages_final);
@@ -708,7 +698,6 @@ int invalidate_inode_pages2_range(struct address_space *mapping,
 				    (loff_t)(end - start + 1) << PAGE_SHIFT, 0);
 	}
 out:
-	cleancache_invalidate_inode(mapping);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(invalidate_inode_pages2_range);
