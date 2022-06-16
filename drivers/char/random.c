@@ -947,6 +947,159 @@ EXPORT_SYMBOL(add_device_randomness);
 static struct timer_rand_state input_timer_state = INIT_TIMER_RAND_STATE;
 
 /*
+ * Interface for in-kernel drivers of true hardware RNGs.
+ * Those devices may produce endless random bits and will be throttled
+ * when our pool is full.
+ */
+void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy)
+{
+	mix_pool_bytes(buf, len);
+	credit_init_bits(entropy);
+
+	/*
+	 * Throttle writing to once every CRNG_RESEED_INTERVAL, unless
+	 * we're not yet initialized.
+	 */
+	if (!kthread_should_stop() && crng_ready())
+		schedule_timeout_interruptible(CRNG_RESEED_INTERVAL);
+}
+EXPORT_SYMBOL_GPL(add_hwgenerator_randomness);
+
+/*
+ * Handle random seed passed by bootloader, and credit it if
+ * CONFIG_RANDOM_TRUST_BOOTLOADER is set.
+ */
+void __init add_bootloader_randomness(const void *buf, size_t len)
+{
+	mix_pool_bytes(buf, len);
+	if (trust_bootloader)
+		credit_init_bits(len * 8);
+}
+
+struct fast_pool {
+	struct work_struct mix;
+	unsigned long pool[4];
+	unsigned long last;
+	unsigned int count;
+};
+
+static DEFINE_PER_CPU(struct fast_pool, irq_randomness) = {
+#ifdef CONFIG_64BIT
+#define FASTMIX_PERM SIPHASH_PERMUTATION
+	.pool = { SIPHASH_CONST_0, SIPHASH_CONST_1, SIPHASH_CONST_2, SIPHASH_CONST_3 }
+#else
+#define FASTMIX_PERM HSIPHASH_PERMUTATION
+	.pool = { HSIPHASH_CONST_0, HSIPHASH_CONST_1, HSIPHASH_CONST_2, HSIPHASH_CONST_3 }
+#endif
+};
+
+/*
+ * This is [Half]SipHash-1-x, starting from an empty key. Because
+ * the key is fixed, it assumes that its inputs are non-malicious,
+ * and therefore this has no security on its own. s represents the
+ * four-word SipHash state, while v represents a two-word input.
+ */
+static void fast_mix(unsigned long s[4], unsigned long v1, unsigned long v2)
+{
+	s[3] ^= v1;
+	FASTMIX_PERM(s[0], s[1], s[2], s[3]);
+	s[0] ^= v1;
+	s[3] ^= v2;
+	FASTMIX_PERM(s[0], s[1], s[2], s[3]);
+	s[0] ^= v2;
+}
+
+#ifdef CONFIG_SMP
+/*
+ * This function is called when the CPU has just come online, with
+ * entry CPUHP_AP_RANDOM_ONLINE, just after CPUHP_AP_WORKQUEUE_ONLINE.
+ */
+int __cold random_online_cpu(unsigned int cpu)
+{
+	/*
+	 * During CPU shutdown and before CPU onlining, add_interrupt_
+	 * randomness() may schedule mix_interrupt_randomness(), and
+	 * set the MIX_INFLIGHT flag. However, because the worker can
+	 * be scheduled on a different CPU during this period, that
+	 * flag will never be cleared. For that reason, we zero out
+	 * the flag here, which runs just after workqueues are onlined
+	 * for the CPU again. This also has the effect of setting the
+	 * irq randomness count to zero so that new accumulated irqs
+	 * are fresh.
+	 */
+	per_cpu_ptr(&irq_randomness, cpu)->count = 0;
+	return 0;
+}
+#endif
+
+static void mix_interrupt_randomness(struct work_struct *work)
+{
+	struct fast_pool *fast_pool = container_of(work, struct fast_pool, mix);
+	/*
+	 * The size of the copied stack pool is explicitly 2 longs so that we
+	 * only ever ingest half of the siphash output each time, retaining
+	 * the other half as the next "key" that carries over. The entropy is
+	 * supposed to be sufficiently dispersed between bits so on average
+	 * we don't wind up "losing" some.
+	 */
+	unsigned long pool[2];
+	unsigned int count;
+
+	/* Check to see if we're running on the wrong CPU due to hotplug. */
+	local_irq_disable();
+	if (fast_pool != this_cpu_ptr(&irq_randomness)) {
+		local_irq_enable();
+		return;
+	}
+
+	/*
+	 * Copy the pool to the stack so that the mixer always has a
+	 * consistent view, before we reenable irqs again.
+	 */
+	memcpy(pool, fast_pool->pool, sizeof(pool));
+	count = fast_pool->count;
+	fast_pool->count = 0;
+	fast_pool->last = jiffies;
+	local_irq_enable();
+
+	mix_pool_bytes(pool, sizeof(pool));
+	credit_init_bits(max(1u, (count & U16_MAX) / 64));
+
+	memzero_explicit(pool, sizeof(pool));
+}
+
+void add_interrupt_randomness(int irq)
+{
+	enum { MIX_INFLIGHT = 1U << 31 };
+	unsigned long entropy = random_get_entropy();
+	struct fast_pool *fast_pool = this_cpu_ptr(&irq_randomness);
+	struct pt_regs *regs = get_irq_regs();
+	unsigned int new_count;
+
+	fast_mix(fast_pool->pool, entropy,
+		 (regs ? instruction_pointer(regs) : _RET_IP_) ^ swab(irq));
+	new_count = ++fast_pool->count;
+
+	if (new_count & MIX_INFLIGHT)
+		return;
+
+	if (new_count < 1024 && !time_is_before_jiffies(fast_pool->last + HZ))
+		return;
+
+	if (unlikely(!fast_pool->mix.func))
+		INIT_WORK(&fast_pool->mix, mix_interrupt_randomness);
+	fast_pool->count |= MIX_INFLIGHT;
+	queue_work_on(raw_smp_processor_id(), system_highpri_wq, &fast_pool->mix);
+}
+EXPORT_SYMBOL_GPL(add_interrupt_randomness);
+
+/* There is one of these per entropy source */
+struct timer_rand_state {
+	unsigned long last_time;
+	long last_delta, last_delta2;
+};
+
+/*
  * This function adds entropy to the entropy "pool" by using timing
  * delays.  It uses the timer_rand_state structure to make an estimate
  * of how many bits of entropy this call has added to the pool.
