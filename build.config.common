@@ -1,8 +1,8 @@
 BRANCH=android-4.14
 
 CC=clang
-LD=ld.lld
-CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r383902/bin
+CXX=clang++
+CLANG_PREBUILT_BIN=prebuilts/clang/host/linux-x86/clang-r349610/bin
 BUILDTOOLS_PREBUILT_BIN=build/build-tools/path/linux-x86
 
 EXTRA_CMDS=''
