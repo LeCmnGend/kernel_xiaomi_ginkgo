@@ -64,7 +64,8 @@ clear
 function clean_all {
 		cd $KERNEL_DIR
 		echo
-		make clean && make mrproper && rm -rf out
+		rm -rf prebuilt
+		rm -rf out && make clean && make mrproper
 }
 
 while read -p "Do you want to clean stuffs (y/n)? " cchoice
@@ -77,6 +78,7 @@ case "$cchoice" in
 		break
 		;;
 	n|N )
+		echo
 		break
 		;;
 	* )
@@ -157,9 +159,18 @@ function create_zip {
 		echo "Zip: $ZIPNAME"
 }
 
+function create_prebuilt {
+		#Copy Image.gz and dtbo.img to prebuilt folder
+		mkdir -p prebuilt
+		cp out/arch/arm64/boot/Image.gz-dtb prebuilt
+		cp out/arch/arm64/boot/dtbo.img prebuilt
+		rm -rf out
+		make clean
+}
+
 if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && [ -f "out/arch/arm64/boot/dtbo.img" ]; then
 		 echo -e "\nKernel compiled succesfully! Zipping up...\n"
-		while read -p "Do you want to create Zip file (y/n)? " cchoice
+		while read -p "Do you want to create Zip file (y/n/p)? " cchoice
 		do
 		case "$cchoice" in
 			y|Y )
@@ -171,6 +182,11 @@ if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && [ -f "out/arch/arm64/boot/dtbo.i
 				echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
 				break
 				;;
+			p|P )
+				create_prebuilt
+				echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
+				break
+				;;			
 			* )
 				echo
 				echo "Invalid try again!"
