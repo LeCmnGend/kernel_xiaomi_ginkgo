@@ -422,11 +422,12 @@ struct fast_pool {
 static DEFINE_PER_CPU(struct fast_pool, irq_randomness) = {
 #ifdef CONFIG_64BIT
 #define FASTMIX_PERM SIPHASH_PERMUTATION
-	.pool = { SIPHASH_CONST_0, SIPHASH_CONST_1, SIPHASH_CONST_2, SIPHASH_CONST_3 }
+	.pool = { SIPHASH_CONST_0, SIPHASH_CONST_1, SIPHASH_CONST_2, SIPHASH_CONST_3 },
 #else
 #define FASTMIX_PERM HSIPHASH_PERMUTATION
-	.pool = { HSIPHASH_CONST_0, HSIPHASH_CONST_1, HSIPHASH_CONST_2, HSIPHASH_CONST_3 }
+	.pool = { HSIPHASH_CONST_0, HSIPHASH_CONST_1, HSIPHASH_CONST_2, HSIPHASH_CONST_3 },
 #endif
+	.mix = __TIMER_INITIALIZER(mix_interrupt_randomness, 0)
 };
 
 /*
@@ -460,9 +461,9 @@ static void fast_mix(struct fast_pool *f)
 	f->count++;
 }
 
-static void mix_interrupt_randomness(unsigned long data)
+static void mix_interrupt_randomness(struct timer_list *work)
 {
-	struct fast_pool *fast_pool = (struct fast_pool *)data;
+	struct fast_pool *fast_pool = container_of(work, struct fast_pool, mix);
 	/*
 	 * The size of the copied stack pool is explicitly 2 longs so that we
 	 * only ever ingest half of the siphash output each time, retaining
