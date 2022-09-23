@@ -272,12 +272,15 @@
 #include <linux/syscalls.h>
 #include <linux/completion.h>
 #include <linux/uuid.h>
+#include <linux/uaccess.h>
+#include <linux/siphash.h>
+#include <linux/uio.h>
+
 #include <crypto/chacha.h>
 #include <crypto/chacha20.h>
 #include <crypto/internal/blake2s.h>
 
 #include <asm/processor.h>
-#include <linux/uaccess.h>
 #include <asm/irq.h>
 #include <asm/irq_regs.h>
 #include <asm/io.h>
@@ -409,10 +412,21 @@ static void mix_pool_bytes(const void *in, int nbytes)
 }
 
 struct fast_pool {
-	u32 pool[4];
+	unsigned long pool[4];
 	unsigned long last;
+	unsigned int count;
 	u16 reg_idx;
-	u8 count;
+	struct timer_list mix;
+};
+
+static DEFINE_PER_CPU(struct fast_pool, irq_randomness) = {
+#ifdef CONFIG_64BIT
+#define FASTMIX_PERM SIPHASH_PERMUTATION
+	.pool = { SIPHASH_CONST_0, SIPHASH_CONST_1, SIPHASH_CONST_2, SIPHASH_CONST_3 }
+#else
+#define FASTMIX_PERM HSIPHASH_PERMUTATION
+	.pool = { HSIPHASH_CONST_0, HSIPHASH_CONST_1, HSIPHASH_CONST_2, HSIPHASH_CONST_3 }
+#endif
 };
 
 /*
@@ -444,6 +458,42 @@ static void fast_mix(struct fast_pool *f)
 	f->pool[0] = a;  f->pool[1] = b;
 	f->pool[2] = c;  f->pool[3] = d;
 	f->count++;
+}
+
+static void mix_interrupt_randomness(unsigned long data)
+{
+	struct fast_pool *fast_pool = (struct fast_pool *)data;
+	/*
+	 * The size of the copied stack pool is explicitly 2 longs so that we
+	 * only ever ingest half of the siphash output each time, retaining
+	 * the other half as the next "key" that carries over. The entropy is
+	 * supposed to be sufficiently dispersed between bits so on average
+	 * we don't wind up "losing" some.
+	 */
+	unsigned long pool[2];
+	unsigned int count;
+
+	/* Check to see if we're running on the wrong CPU due to hotplug. */
+	local_irq_disable();
+	if (fast_pool != this_cpu_ptr(&irq_randomness)) {
+		local_irq_enable();
+		return;
+	}
+
+	/*
+	 * Copy the pool to the stack so that the mixer always has a
+	 * consistent view, before we reenable irqs again.
+	 */
+	memcpy(pool, fast_pool->pool, sizeof(pool));
+	count = fast_pool->count;
+	fast_pool->count = 0;
+	fast_pool->last = jiffies;
+	local_irq_enable();
+
+	mix_pool_bytes(pool, sizeof(pool));
+	credit_init_bits(clamp_t(unsigned int, (count & U16_MAX) / 64, 1, sizeof(pool) * 8));
+
+	memzero_explicit(pool, sizeof(pool));
 }
 
 static void process_random_ready_list(void)
@@ -1169,6 +1219,43 @@ static void extract_entropy(void *buf, size_t nbytes)
 
 	memzero_explicit(seed, sizeof(seed));
 	memzero_explicit(&block, sizeof(block));
+}
+
+#define credit_init_bits(bits) if (!crng_ready()) _credit_init_bits(bits)
+
+static void __cold _credit_init_bits(size_t bits)
+{
+	unsigned int new, orig, add;
+	unsigned long flags;
+
+	if (!bits)
+		return;
+
+	add = min_t(size_t, bits, POOL_BITS);
+
+	do {
+		orig = READ_ONCE(input_pool.init_bits);
+		new = min_t(unsigned int, POOL_BITS, orig + add);
+	} while (cmpxchg(&input_pool.init_bits, orig, new) != orig);
+
+	if (orig < POOL_READY_BITS && new >= POOL_READY_BITS) {
+		crng_reseed(); /* Sets crng_init to CRNG_READY under base_crng.lock. */
+		process_random_ready_list();
+		wake_up_interruptible(&crng_init_wait);
+		kill_fasync(&fasync, SIGIO, POLL_IN);
+		pr_notice("crng init done\n");
+		if (urandom_warning.missed)
+			pr_notice("%d urandom warning(s) missed due to ratelimiting\n",
+				  urandom_warning.missed);
+	} else if (orig < POOL_EARLY_BITS && new >= POOL_EARLY_BITS) {
+		spin_lock_irqsave(&base_crng.lock, flags);
+		/* Check if crng_init is CRNG_EMPTY, to avoid race with crng_reseed(). */
+		if (crng_init == CRNG_EMPTY) {
+			extract_entropy(base_crng.key, sizeof(base_crng.key));
+			crng_init = CRNG_EARLY;
+		}
+		spin_unlock_irqrestore(&base_crng.lock, flags);
+	}
 }
 
 #define warn_unseeded_randomness(previous) \
