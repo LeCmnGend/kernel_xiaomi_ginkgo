@@ -10,11 +10,11 @@
 #include "ratelimiter.h"
 #include "timers.h"
 
-#include <zinc/blake2s.h>
 #include <zinc/chacha20poly1305.h>
 
 #include <net/ipv6.h>
 #include <crypto/algapi.h>
+#include <crypto/internal/blake2s.h>
 
 void wg_cookie_checker_init(struct cookie_checker *checker,
 			    struct wg_device *wg)

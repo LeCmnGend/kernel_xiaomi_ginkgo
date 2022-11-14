@@ -8,8 +8,8 @@
 
 #include <zinc/curve25519.h>
 #include <zinc/chacha20poly1305.h>
-#include <zinc/blake2s.h>
 
+#include <crypto/internal/blake2s.h>
 #include <linux/kernel.h>
 #include <linux/param.h>
 #include <linux/skbuff.h>
