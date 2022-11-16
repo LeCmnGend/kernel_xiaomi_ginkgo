@@ -167,7 +167,7 @@ static inline void blake2s_compress(struct blake2s_state *state,
 	}
 }
 
-void blake2s_update(struct blake2s_state *state, const u8 *in, size_t inlen)
+void zinc_blake2s_update(struct blake2s_state *state, const u8 *in, size_t inlen)
 {
 	const size_t fill = BLAKE2S_BLOCK_SIZE - state->buflen;
 
@@ -191,7 +191,7 @@ void blake2s_update(struct blake2s_state *state, const u8 *in, size_t inlen)
 	state->buflen += inlen;
 }
 
-void blake2s_final(struct blake2s_state *state, u8 *out)
+void zinc_blake2s_final(struct blake2s_state *state, u8 *out)
 {
 	WARN_ON(IS_ENABLED(DEBUG) && !out);
 	blake2s_set_lastblock(state);
