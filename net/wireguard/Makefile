@@ -11,6 +11,15 @@ DKMSDIR ?= $(SRCDIR)/wireguard
 DEPMOD ?= depmod
 DEPMODBASEDIR ?= /
 
+KERNELRELEASE ?= $(shell uname -r)
+KERNELDIR ?= /lib/modules/$(KERNELRELEASE)/build
+PREFIX ?= /usr
+DESTDIR ?=
+SRCDIR ?= $(PREFIX)/src
+DKMSDIR ?= $(SRCDIR)/wireguard
+DEPMOD ?= depmod
+DEPMODBASEDIR ?= /
+
 PWD := $(shell pwd)
 
 all: module

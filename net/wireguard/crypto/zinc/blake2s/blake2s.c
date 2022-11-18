@@ -167,7 +167,7 @@ static inline void blake2s_compress(struct blake2s_state *state,
 	}
 }
 
-void blake2s_update(struct blake2s_state *state, const u8 *in, size_t inlen)
+void zinc_blake2s_update(struct blake2s_state *state, const u8 *in, size_t inlen)
 {
 	const size_t fill = BLAKE2S_BLOCK_SIZE - state->buflen;
 
@@ -191,7 +191,7 @@ void blake2s_update(struct blake2s_state *state, const u8 *in, size_t inlen)
 	state->buflen += inlen;
 }
 
-void blake2s_final(struct blake2s_state *state, u8 *out)
+void zinc_blake2s_final(struct blake2s_state *state, u8 *out)
 {
 	WARN_ON(IS_ENABLED(DEBUG) && !out);
 	blake2s_set_lastblock(state);
@@ -201,42 +201,6 @@ void blake2s_final(struct blake2s_state *state, u8 *out)
 	cpu_to_le32_array(state->h, ARRAY_SIZE(state->h));
 	memcpy(out, state->h, state->outlen);
 	memzero_explicit(state, sizeof(*state));
-}
-
-void blake2s_hmac(u8 *out, const u8 *in, const u8 *key, const size_t outlen,
-		  const size_t inlen, const size_t keylen)
-{
-	struct blake2s_state state;
-	u8 x_key[BLAKE2S_BLOCK_SIZE] __aligned(__alignof__(u32)) = { 0 };
-	u8 i_hash[BLAKE2S_HASH_SIZE] __aligned(__alignof__(u32));
-	int i;
-
-	if (keylen > BLAKE2S_BLOCK_SIZE) {
-		blake2s_init(&state, BLAKE2S_HASH_SIZE);
-		blake2s_update(&state, key, keylen);
-		blake2s_final(&state, x_key);
-	} else
-		memcpy(x_key, key, keylen);
-
-	for (i = 0; i < BLAKE2S_BLOCK_SIZE; ++i)
-		x_key[i] ^= 0x36;
-
-	blake2s_init(&state, BLAKE2S_HASH_SIZE);
-	blake2s_update(&state, x_key, BLAKE2S_BLOCK_SIZE);
-	blake2s_update(&state, in, inlen);
-	blake2s_final(&state, i_hash);
-
-	for (i = 0; i < BLAKE2S_BLOCK_SIZE; ++i)
-		x_key[i] ^= 0x5c ^ 0x36;
-
-	blake2s_init(&state, BLAKE2S_HASH_SIZE);
-	blake2s_update(&state, x_key, BLAKE2S_BLOCK_SIZE);
-	blake2s_update(&state, i_hash, BLAKE2S_HASH_SIZE);
-	blake2s_final(&state, i_hash);
-
-	memcpy(out, i_hash, outlen);
-	memzero_explicit(x_key, BLAKE2S_BLOCK_SIZE);
-	memzero_explicit(i_hash, BLAKE2S_HASH_SIZE);
 }
 
 #include "../selftest/blake2s.c"
