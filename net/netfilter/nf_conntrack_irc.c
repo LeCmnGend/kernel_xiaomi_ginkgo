@@ -256,6 +256,10 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 	struct irc_client_info *temp;
 	bool mangle = true;
 
+	/* If packet is coming from IRC server */
+	if (dir == IP_CT_DIR_REPLY)
+		return NF_ACCEPT;
+
 	/* Until there's been traffic both ways, don't look in packets. */
 	if (ctinfo != IP_CT_ESTABLISHED && ctinfo != IP_CT_ESTABLISHED_REPLY)
 		return NF_ACCEPT;
@@ -428,8 +432,9 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 				 *external (NAT'ed) IP
 				 */
 				tuple = &ct->tuplehash[dir].tuple;
-				if (tuple->src.u3.ip != dcc_ip &&
-				    tuple->dst.u3.ip != dcc_ip) {
+				if ((tuple->src.u3.ip != dcc_ip &&
+					 ct->tuplehash[!dir].tuple.dst.u3.ip != dcc_ip) ||
+					dcc_port == 0) {
 					net_warn_ratelimited("Forged DCC command from %pI4: %pI4:%u\n",
 							     &tuple->src.u3.ip,
 							     &dcc_ip, dcc_port);
