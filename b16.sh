@@ -6,7 +6,7 @@
 #
 # Download needed files
 KERNEL_DIR=`pwd`
-TC_BRANCH="clang-15"
+TC_BRANCH="clang-16"
 TC_DIR="$HOME/tc/proton/$TC_BRANCH"
 TC_URL="https://gitlab.com/lecmngend/proton-clang"
 TC_GIT_BRANCH=$TC_BRANCH
